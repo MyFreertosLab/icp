@@ -16,3 +16,7 @@ dependencies = [
     "pytest"
 ]
 
+
+[tool.setuptools]
+packages = ["icp"]
+
