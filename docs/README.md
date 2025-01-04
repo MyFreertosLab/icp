@@ -1,1 +1,3 @@
-# IMU Calibration Project\nThis project handles calibration of IMU sensors.
+# IMU Calibration Project
+
+This project handles calibration of IMU sensors.
