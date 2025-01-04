@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icp_project"
+version = "0.0.1a1"
+description = "A project for calibrating IMU sensors like accelerometer, magnetometer, and gyroscope."
+authors = [
+    { name = "Andrea Lambruschini", email = "andrea.lambruschini@gmail.com" }
+]
+license = { text = "MIT" }
+dependencies = [
+    "paho-mqtt",
+    "numpy",
+    "pytest"
+]
+
