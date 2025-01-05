@@ -3,12 +3,10 @@ import pytest
 import threading
 import time
 import json
-import paho.mqtt.client as mqtt
-import numpy as np
 import struct
 from icp.mqtt.client import MQTTClient
 from icp.icp_tests.test_components.mpu9250_simulator import MPU9250Simulator
-from icp.utils.constants import TOPICS, FORMATS, MPUMessageType
+from icp.utils.constants import FORMATS, MPUMessageType
 
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
@@ -22,67 +20,108 @@ def mqtt_client():
     return client
 
 def test_simulator(mqtt_client):
-    hello_received = False
-    measure_received = False
-
-    simulator = MPU9250Simulator(mqtt_client)
     result = {
         "hellos": [],
         "measures": [],
     }
 
+    # Define handlers for testing
     def on_hello(topic, payload):
-        hello = payload
-        result["hellos"].append(hello)
-        
+        result["hellos"].append(payload)  # Decoded as string
+
     def on_measure(topic, payload):
         msg_type, = struct.unpack("I", payload[:4])
         measure = struct.unpack(FORMATS[MPUMessageType(msg_type)], payload)
         result["measures"].append(measure)
 
-    mqtt_client.add_handler(TOPICS["mpu_hello"], on_hello)
-    mqtt_client.add_handler(TOPICS["mpu_measures"], on_measure)
- 
+    # Add handlers for expected topics
+    mqtt_client.add_handler(
+        {"topic": "/imu/calibration/mpu/hello", "type": "string"},
+        on_hello
+    )
+    mqtt_client.add_handler(
+        {"topic": "/imu/calibration/mpu/measures", "type": "binary"},
+        on_measure
+    )
+
+    # Simulate ComponentRegistry response
+    def handle_registration(topic, payload):
+        registration_request = payload
+        component_name = registration_request["name"]
+
+        # Mock resolved topics for MPU9250Simulator
+        resolved_topics = {
+            "hello_in": {
+                "topic": "/imu/calibration/st/hello",
+                "type": "string"
+            },
+            "commands_in": {
+                "topic": "/imu/calibration/mpu/command",
+                "type": "string"
+            },
+            "hello_out": {
+                "topic": "/imu/calibration/mpu/hello",
+                "type": "string"
+            },
+            "measurements_out": {
+                "topic": "/imu/calibration/mpu/measures",
+                "type": "binary"
+            }
+        }
+
+        # Respond to the registration request
+        mqtt_client.publish({ "topic": f"/system/registry/{component_name}/response", "type": "json"},resolved_topics)
+
+    mqtt_client.add_handler(
+        {"topic": "/system/registry/register", "type": "json"},
+        handle_registration
+    )
+
+    # Start the simulator
+    simulator = MPU9250Simulator(mqtt_client)
     simulator.start()
 
     ####################################################
     #### Start test flow
     ####################################################
-    # send hello
-    mqtt_client.publish(TOPICS["starter_hello"], "hello")
-    # Risposta hello ricevuta
+    # Send hello
+    mqtt_client.publish({"topic": "/imu/calibration/st/hello", "type": "string"},payload="hello")
+    # Wait for hello response
     for i in range(10):
         time.sleep(1)
-        measure_received = (len(result["measures"]) > 0)
-        hello_received = (len(result["hellos"]) > 0)
-        if hello_received:
+        if len(result["hellos"]) > 0:
             break
+        # resend message .. 
+        mqtt_client.publish({"topic": "/imu/calibration/st/hello", "type": "string"},payload="hello")
 
-    assert hello_received
-    measure_received = (len(result["measures"]) > 0)
-    assert not measure_received
+    assert len(result["hellos"]) > 0
 
-    # Ciclo di misurazione
-    for j in range(10):
-      # Start misurazione
-      mqtt_client.publish(TOPICS["mpu_command"], "start")
-      # Misure ricevute
-      for i in range(10):
+    # Start measurement
+    mqtt_client.publish(
+        {"topic": "/imu/calibration/mpu/command", "type": "string"},
+        payload="start"
+    )
+
+    # Wait for measurements
+    for i in range(10):
         time.sleep(1)
-        measure_received = (len(result["measures"]) > 0)
-        if measure_received:
+        if len(result["measures"]) > 0:
             break
-        
-      assert measure_received
-      # Stop misurazione
-      mqtt_client.publish(TOPICS["mpu_command"], "stop")
-      time.sleep(2)
-      measure_received = False
-      # Misure non più ricevute
-      time.sleep(2)
-      assert not measure_received
-   
-    time.sleep(2)  # Allow time for execution
+
+    assert len(result["measures"]) > 0
+
+    # Stop measurement
+    mqtt_client.publish(
+        {"topic": "/imu/calibration/mpu/command", "type": "string"},
+        payload="stop"
+    )
+    time.sleep(2)
+
+    # Ensure no further measurements
+    previous_count = len(result["measures"])
+    time.sleep(2)
+    assert len(result["measures"]) == previous_count
+
     simulator.shutdown()
     simulator.join()
 

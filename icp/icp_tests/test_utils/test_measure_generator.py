@@ -8,7 +8,7 @@ def test_measure_generator():
     iteration_limit = 10  # Limita il numero di iterazioni
     count = 0
 
-    for topic, payload in generator.generate_measurements():
+    for payload in generator.generate_measurements():
         count += 1
         if count >= iteration_limit:
             generator.running = False

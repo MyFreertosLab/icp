@@ -1,7 +1,7 @@
 import numpy as np
 import struct
 import time
-from icp.utils.constants import TOPICS, FORMATS, MPUMessageType
+from icp.utils.constants import FORMATS, MPUMessageType
 
 
 # Measure Generator Utility
@@ -49,8 +49,8 @@ class MeasureGenerator:
         )
 
         # Yield IMU data
-        yield TOPICS["mpu_measures"], imu_payload
+        yield imu_payload
 
         # Yield Magnetometer data
-        yield TOPICS["mpu_measures"], magneto_payload
+        yield magneto_payload
 
