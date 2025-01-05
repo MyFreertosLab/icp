@@ -3,11 +3,14 @@ import threading
 import time
 import json
 import struct
+import logging
 from icp.icp_tests.test_components.measure_generator import MeasureGenerator
 
 class MPU9250Simulator(threading.Thread):
     def __init__(self, mqtt_client, frequency=500):
         super().__init__()
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(__name__)
         self.frequency = frequency
         self.mqtt_client = mqtt_client
         self.generator = MeasureGenerator()
@@ -15,6 +18,7 @@ class MPU9250Simulator(threading.Thread):
         self.running = True
         self.topics = None  # Sarà popolato con i topic assegnati dal registro
         self.register_with_registry()
+        self.logger.debug("initialized component")
 
     def register_with_registry(self):
         # Messaggio di registrazione con i pin definiti
@@ -37,7 +41,7 @@ class MPU9250Simulator(threading.Thread):
             "type": "json"},
             registration_message
         )
-
+        self.logger.debug(f"sent registration request:  {registration_message}")
         # Ascolta la risposta del registro
         response_topic = "/system/registry/MPU9250Simulator/response"
         self.mqtt_client.add_handler(
@@ -48,7 +52,7 @@ class MPU9250Simulator(threading.Thread):
     def handle_registry_response(self, topic, payload):
         # Salva i topic assegnati dal registro
         self.topics = payload
-        print(f"Received topics from registry: {self.topics}")
+        self.logger.debug(f"received register response:  {payload}")
 
         # Configura i topic di input
         if "hello_in" in self.topics:
@@ -77,7 +81,7 @@ class MPU9250Simulator(threading.Thread):
                 self.mqtt_client.publish(self.topics["hello_out"],"hello")
 
     def start_sending_measurements(self):
-        for payload in self.generator.generate_measurements():
+         for payload in self.generator.generate_measurements():
             if not self.running_measurements:
                 break
             if "measurements_out" in self.topics:
@@ -91,3 +95,4 @@ class MPU9250Simulator(threading.Thread):
             if self.running_measurements:
                 self.start_sending_measurements()
             time.sleep(1 / self.frequency)
+        self.logger.debug(f"bye bye ...")
