@@ -8,35 +8,39 @@ from icp.utils.constants import TOPICS
 from icp.icp_tests.test_components.measure_generator import MeasureGenerator
 
 class MPU9250Simulator(threading.Thread):
-    def __init__(self, mqtt_client):
+    def __init__(self, mqtt_client, frequency=500):
         super().__init__()
+        self.frequency = frequency
         self.mqtt_client = mqtt_client
         self.generator = MeasureGenerator()
-        self.running = False
+        self.running_measurements = False
+        self.running = True
         mqtt_client.add_handler(TOPICS["mpu_command"], self.handle_command)
         mqtt_client.add_handler(TOPICS["starter_hello"], self.handle_hello)
 
     def handle_command(self, topic, payload):
-        command = payload.decode()
+        command = payload
         if command == "start":
-            self.running = True
             self.generator.running = True
-            self.start_sending_measurements()
+            self.running_measurements = True
         elif command == "stop":
-            self.running = False
+            self.running_measurements = False
             self.generator.running = False
 
     def handle_hello(self, topic, payload):
-        if payload.decode() == "hello":
-            self.mqtt_client.publish(TOPICS["mpu_hello"], "hello")
+        if payload == "hello":
+           self.mqtt_client.publish(TOPICS["mpu_hello"], "hello")
 
     def start_sending_measurements(self):
-        for topic, payload in self.generator.generate_measurements():
-            if not self.running:
-                break
-            self.mqtt_client.publish(topic, payload)
+        for topic_key, payload in self.generator.generate_measurements():
+          if not self.running_measurements:
+            break
+          self.mqtt_client.publish(topic_key, payload)
+    def shutdown(self):
+        self.running = False
 
     def run(self):
-        while True:
-            time.sleep(0.1)
-
+        while self.running:
+            if self.running_measurements:
+                self.start_sending_measurements()
+            time.sleep(1/self.frequency)

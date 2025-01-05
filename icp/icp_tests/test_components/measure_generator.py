@@ -8,7 +8,6 @@ from icp.utils.constants import TOPICS, FORMATS, MPUMessageType
 class MeasureGenerator:
     def __init__(self, frequency=500):
         self.frequency = frequency
-        self.running = False
         self.position = np.array([0.0, 0.0, 1.0])  # Default aligned with Z-axis
         self.position_mag = np.array([18.817428588867188, 39.208831787109375, 10.782428741455078])  # Default aligned with Z-axis
         self.temp_mean = 27.0
@@ -27,35 +26,31 @@ class MeasureGenerator:
         return magnetic_field
 
     def generate_measurements(self):
-        while self.running:
-            timestamp = int(time.time() * 1000)
+        timestamp = int(time.time())
 
-            # Generate IMU data
-            accel, gyro, temp_accel = self.generate_accel_gyro()
-            imu_payload = struct.pack(
-                FORMATS[MPUMessageType.IMU],  # Tipo messaggio, timestamp, accel[3], gyro[3], temp
-                MPUMessageType.IMU,
-                timestamp,
-                *accel,
-                *gyro,
-                temp_accel
-            )
+        # Generate IMU data
+        accel, gyro, temp_accel = self.generate_accel_gyro()
+        imu_payload = struct.pack(
+            FORMATS[MPUMessageType.IMU],  # Tipo messaggio, timestamp, accel[3], gyro[3], temp
+            MPUMessageType.IMU.value,
+            timestamp,
+            *accel,
+            *gyro,
+            temp_accel
+        )
 
             # Generate Magnetometer data
-            magnetic_field = self.generate_magnet()
-            magneto_payload = struct.pack(
-                FORMATS[MPUMessageType.MAGNETO],  # Tipo messaggio, timestamp, magneto[3]
-                MPUMessageType.MAGNETO,
-                timestamp,
-                *magnetic_field
-            )
+        magnetic_field = self.generate_magnet()
+        magneto_payload = struct.pack(
+            FORMATS[MPUMessageType.MAGNETO],  # Tipo messaggio, timestamp, magneto[3]
+            MPUMessageType.MAGNETO.value,
+            timestamp,
+            *magnetic_field
+        )
 
-            # Yield IMU data
-            yield TOPICS["mpu_measures"], imu_payload
+        # Yield IMU data
+        yield TOPICS["mpu_measures"], imu_payload
 
-            # Yield Magnetometer data
-            yield TOPICS["mpu_measures"], magneto_payload
-
-            # Wait for next measurement
-            time.sleep(1 / self.frequency)
+        # Yield Magnetometer data
+        yield TOPICS["mpu_measures"], magneto_payload
 
