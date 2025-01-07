@@ -34,20 +34,20 @@ def test_component_registry_registration(mqtt_client, component_registry):
 
     # Add handler for the response topic
     mqtt_client.add_handler(
-        {"topic": "/system/registry/MPU9250Simulator/response", "type": "json"},
+        {"topic": "/system/registry/imu/response", "type": "json"},
         on_response
     )
 
     # Send a registration request
     registration_message = {
-        "name": "MPU9250Simulator",
+        "name": "imu",
         "pins": {
             "input": [
-                {"name": "hello_in", "type": "string"},
-                {"name": "commands_in", "type": "string"}
+                {"name": "control_status_in", "type": "string"},
+                {"name": "configs_in", "type": "binary"}
             ],
             "output": [
-                {"name": "hello_out", "type": "string"},
+                {"name": "status_out", "type": "string"},
                 {"name": "measurements_out", "type": "binary"}
             ]
         }
@@ -68,23 +68,23 @@ def test_component_registry_registration(mqtt_client, component_registry):
 
     # Verify the resolved topics
     expected_response = {
-        "hello_in": {
-            "topic": "/imu/calibration/st/hello",
-            "type": "string"
-        },
-        "commands_in": {
-            "topic": "/imu/calibration/mpu/command",
-            "type": "string"
-        },
-        "hello_out": {
-            "topic": "/imu/calibration/mpu/hello",
-            "type": "string"
-        },
-        "measurements_out": {
-            "topic": "/imu/calibration/mpu/measures",
-            "type": "binary"
+            "control_status_in": {
+                "topic": "/imu/calibration/point_estimator/status",
+                "type": "string"
+            },
+            "configs_in": {
+                "topic": "/imu/calibration/imu/configs",
+                "type": "binary"
+            },
+            "status_out": {
+                "topic": "/imu/calibration/imu/status",
+                "type": "string"
+            },
+            "measurements_out": {
+                "topic": "/imu/calibration/imu/measures",
+                "type": "binary"
+            }
         }
-    }
 
     assert result["response"] == expected_response
 

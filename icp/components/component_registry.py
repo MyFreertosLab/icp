@@ -11,24 +11,24 @@ import logging
 # Mapping globale dei pin
 MAPPINGS = [
     {
-        "source": {"component": "MPU9250Simulator", "pin": "hello_out"},
-        "target": {"component": "starter", "pin": "hello_in"},
-        "topic": {"name": "/imu/calibration/mpu/hello", "type": "string"}
+        "source": {"component": "imu", "pin": "status_out"},
+        "target": {"component": "point_estimator", "pin": "imu_status_in"},
+        "topic": {"name": "/imu/calibration/imu/status", "type": "string"}
     },
     {
-        "source": {"component": "starter", "pin": "hello_out"},
-        "target": {"component": "MPU9250Simulator", "pin": "hello_in"},
-        "topic": {"name": "/imu/calibration/st/hello", "type": "string"}
+        "source": {"component": "point_estimator", "pin": "status_out"},
+        "target": {"component": "imu", "pin": "control_status_in"},
+        "topic": {"name": "/imu/calibration/point_estimator/status", "type": "string"}
     },
     {
-        "source": {"component": "MPU9250Simulator", "pin": "measurements_out"},
-        "target": {"component": "PointEstimator", "pin": "measurements_in"},
-        "topic": {"name": "/imu/calibration/mpu/measures", "type": "binary"}
+        "source": {"component": "imu", "pin": "measurements_out"},
+        "target": {"component": "point_estimator", "pin": "measurements_in"},
+        "topic": {"name": "/imu/calibration/imu/measures", "type": "binary"}
     },
     {
-        "source": {"component": "PointEstimator", "pin": "commands_out"},
-        "target": {"component": "MPU9250Simulator", "pin": "commands_in"},
-        "topic": {"name": "/imu/calibration/mpu/command", "type": "string"}
+        "source": {"component": "point_estimator", "pin": "imu_configs_out"},
+        "target": {"component": "imu", "pin": "configs_in"},
+        "topic": {"name": "/imu/calibration/imu/configs", "type": "binary"}
     }
 ]
 

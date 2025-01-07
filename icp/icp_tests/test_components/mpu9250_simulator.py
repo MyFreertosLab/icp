@@ -14,27 +14,65 @@ class MPU9250Simulator(threading.Thread):
         self.frequency = frequency
         self.mqtt_client = mqtt_client
         self.generator = MeasureGenerator()
-        self.running_measurements = False
-        self.running = True
         self.topics = None  # Sarà popolato con i topic assegnati dal registro
+        self.control_status = "unknown"
+        self.status = "unknown"
         self.register_with_registry()
         self.logger.debug("initialized component")
 
+    ###########################################
+    #### Handlers
+    ###########################################
+    def handle_registry_response(self, topic, payload):
+        # Salva i topic assegnati dal registro
+        self.topics = payload
+        self.logger.debug(f"received register response:  {payload}")
+
+        # Configura i topic di input
+        if "control_status_in" in self.topics:
+            self.mqtt_client.add_handler(
+                self.topics["control_status_in"],
+                self.handle_control_status
+            )
+        if "settings_in" in self.topics:
+            self.mqtt_client.add_handler(
+                self.topics["settings_in"],
+                self.handle_settings
+            )
+        self.set_state_idle()
+
+    def handle_settings(self, topic, payload):
+        self.logger(f"received settings from topic {topic}", topic)
+
+    def handle_control_status(self, topic, payload):
+        self.logger.debug(f"received control status: {payload}")
+        self.control_status = payload
+        if self.control_status == "waiting_measurements" or self.control_status == "receiving_measurements":
+            self.set_state_sending_measurements()
+        elif self.control_status == "shutting_down":
+            self.set_state_offline()
+        else:
+            self.set_state_idle()            
+
+    ###########################################
+    #### Registration
+    ###########################################
     def register_with_registry(self):
-        # Messaggio di registrazione con i pin definiti
+        self.set_state_registering()
         registration_message = {
-            "name": "MPU9250Simulator",
+            "name": "imu",
             "pins": {
                 "input": [
-                    {"name": "hello_in", "type": "string"},
-                    {"name": "commands_in", "type": "string"}
+                    {"name": "control_status_in", "type": "string"},
+                    {"name": "settings_in", "type": "binary"}
                 ],
                 "output": [
-                    {"name": "hello_out", "type": "string"},
+                    {"name": "status_out", "type": "string"},
                     {"name": "measurements_out", "type": "binary"}
                 ]
             }
         }
+
         # Invia la registrazione al registro
         self.mqtt_client.publish({
             "topic": "/system/registry/register",
@@ -43,56 +81,60 @@ class MPU9250Simulator(threading.Thread):
         )
         self.logger.debug(f"sent registration request:  {registration_message}")
         # Ascolta la risposta del registro
-        response_topic = "/system/registry/MPU9250Simulator/response"
+        response_topic = "/system/registry/imu/response"
         self.mqtt_client.add_handler(
             {"topic": response_topic, "type": "json"},
             self.handle_registry_response
         )
 
-    def handle_registry_response(self, topic, payload):
-        # Salva i topic assegnati dal registro
-        self.topics = payload
-        self.logger.debug(f"received register response:  {payload}")
+    ###########################################
+    #### Functionalities
+    ###########################################
+    def send_measurements(self):
+        if "measurements_out" in self.topics:
+           for payload in self.generator.generate_measurements():
+               self.mqtt_client.publish(self.topics["measurements_out"],payload)
 
-        # Configura i topic di input
-        if "hello_in" in self.topics:
-            self.mqtt_client.add_handler(
-                self.topics["hello_in"],
-                self.handle_hello
-            )
-        if "commands_in" in self.topics:
-            self.mqtt_client.add_handler(
-                self.topics["commands_in"],
-                self.handle_command
-            )
+    ###########################################
+    #### States and Transtions
+    ###########################################
+    def set_state_offline(self):
+        if not self.is_state_offline():
+           self.status = "offline"
+           self.mqtt_client.publish(self.topics["status_out"],self.status)
 
-    def handle_command(self, topic, payload):
-        command = payload  # Decodificato automaticamente
-        if command == "start":
-            self.generator.running = True
-            self.running_measurements = True
-        elif command == "stop":
-            self.running_measurements = False
-            self.generator.running = False
+    def is_state_offline(self):
+        return self.status == "offline"
 
-    def handle_hello(self, topic, payload):
-        if payload == "hello":
-            if "hello_out" in self.topics:
-                self.mqtt_client.publish(self.topics["hello_out"],"hello")
+    def set_state_sending_measurements(self):
+        if not self.is_state_sending_measurements():
+           self.status = "sending_measurements"
+           self.mqtt_client.publish(self.topics["status_out"],self.status)
 
-    def start_sending_measurements(self):
-         for payload in self.generator.generate_measurements():
-            if not self.running_measurements:
-                break
-            if "measurements_out" in self.topics:
-                self.mqtt_client.publish(self.topics["measurements_out"],payload)
+    def is_state_sending_measurements(self):
+        return self.status == "sending_measurements"
 
-    def shutdown(self):
-        self.running = False
+    def set_state_idle(self):
+        if not self.is_state_idle():
+           self.status = "idle"
+           self.mqtt_client.publish(self.topics["status_out"],self.status)
 
+    def is_state_idle(self):
+        return self.status == "idle"
+
+    def set_state_registering(self):
+        if not self.is_state_registering():
+           self.status = "registering"
+
+    def is_state_registering(self):
+        return self.status == "registering"
+
+    ###########################################
+    #### Thread Loop
+    ###########################################
     def run(self):
-        while self.running:
-            if self.running_measurements:
-                self.start_sending_measurements()
+        while not self.is_state_offline():
+            if self.is_state_sending_measurements():
+                self.send_measurements()
             time.sleep(1 / self.frequency)
         self.logger.debug(f"bye bye ...")
