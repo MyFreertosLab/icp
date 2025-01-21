@@ -1,11 +1,9 @@
-
 import threading
 import time
 import json
 import struct
 import logging
 from icp.icp_tests.test_components.measure_generator import MeasureGenerator
-
 
 class MPU9250Simulator(threading.Thread):
     def __init__(self, mqtt_client, frequency=500):
