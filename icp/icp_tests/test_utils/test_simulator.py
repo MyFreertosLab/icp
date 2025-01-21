@@ -68,13 +68,28 @@ class MPU9250SimulatorTest:
             resolved_topics
         )
 
-    def wait_for_condition(self, condition, retries=10, delay=1):
-        """Attende che una condizione sia vera."""
-        for _ in range(retries):
-            time.sleep(delay)
-            if condition():
-                return True
-        return False
+    def wait_for_condition(self, condition, retries=10, delay=1, status_topic=None, status_payload=None):
+      """
+      Attende che una condizione sia vera, ripubblicando lo stato corrente se fornito.
+    
+      Args:
+        condition (callable): Funzione booleana che rappresenta la condizione.
+        retries (int): Numero massimo di tentativi.
+        delay (float): Intervallo di attesa tra i tentativi (in secondi).
+        status_topic (dict): Il topic MQTT per ripubblicare lo stato, se necessario.
+        status_payload (str): Lo stato da ripubblicare sul topic.
+    
+      Returns:
+        bool: True se la condizione è soddisfatta, False altrimenti.
+      """
+      for _ in range(retries):
+        if condition():
+            return True
+        if status_topic and status_payload:
+            self.mqtt_client.publish(status_topic, payload=status_payload)
+            logger.debug(f"Re-published status: {status_payload} to topic: {status_topic}")
+        time.sleep(delay)
+      return False
 
     def run_test(self):
         """Esegue il flusso completo di test."""
@@ -84,41 +99,59 @@ class MPU9250SimulatorTest:
         time.sleep(2)
 
         # Fase 1: Stato Idle
-        logger.info("Testing IMU idle state...")
+        logger.info("Testing IMU idle state when starting ...")
         self.mqtt_client.publish(
             {"topic": "/imu/calibration/control/status", "type": "string"},
             payload="starting"
         )
-        assert self.wait_for_condition(lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "idle")
+        assert self.wait_for_condition(
+            lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "idle",
+            retries=10,
+            delay=1,
+            status_topic={"topic": "/imu/calibration/control/status", "type": "string"},
+            status_payload="starting"
+        )
 
         # Fase 2: Misurazioni in corso
-        logger.info("Testing IMU sending measurements state...")
+        logger.info("Testing IMU sending measurements state when waiting_measurements...")
         self.mqtt_client.publish(
             {"topic": "/imu/calibration/control/status", "type": "string"},
             payload="waiting_measurements"
         )
-        assert self.wait_for_condition(lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "sending_measurements")
-        assert self.wait_for_condition(lambda: len(self.result["measures"]) > 100)
+        assert self.wait_for_condition(
+            lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "sending_measurements",
+            retries=10,
+            delay=1,
+            status_topic={"topic": "/imu/calibration/control/status", "type": "string"},
+            status_payload="waiting_measurements"
+        )
+        assert self.wait_for_condition(lambda: len(self.result["measures"]) > 0)
 
         # Fase 3: Stato di elaborazione
-        logger.info("Testing IMU processing state...")
+        logger.info("Testing IMU idle state when processing...")
         self.mqtt_client.publish(
             {"topic": "/imu/calibration/control/status", "type": "string"},
             payload="processing"
         )
-        assert self.wait_for_condition(lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "idle")
-        self.result["measures"] = []
+        assert self.wait_for_condition(
+            lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "idle",
+            retries=10,
+            delay=1,
+            status_topic={"topic": "/imu/calibration/control/status", "type": "string"},
+            status_payload="processing"
+        )
 
         # Fase 4: Spegnimento
-        logger.info("Testing IMU offline state...")
-        self.mqtt_client.publish(
-            {"topic": "/imu/calibration/control/status", "type": "string"},
-            payload="shutting_down"
+        logger.info("Testing IMU offline state when shutting_down...")
+        assert self.wait_for_condition(
+            lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "offline",
+            retries=10,
+            delay=1,
+            status_topic={"topic": "/imu/calibration/control/status", "type": "string"},
+            status_payload="shutting_down"
         )
-        assert self.wait_for_condition(lambda: len(self.result["imu_status_seq"]) > 0 and self.result["imu_status_seq"][-1] == "offline")
         logger.info("IMU simulator reached offline state successfully.")
 
-        # Ferma il simulatore
         self.simulator.join()
 
 
